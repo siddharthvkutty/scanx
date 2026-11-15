@@ -12,6 +12,7 @@ An Android app that turns photos of paper into a clean PDF. Pick images from you
 - **Edges are found for you.** OpenCV looks for the sheet of paper in each photo and straightens it. If it guesses wrong, drag the four corner brackets yourself, or tap *Detect edges* to try again.
 - **Three looks:** Original, Greyscale, and B&W scan (greyscale with extra contrast, so paper goes white).
 - **Set every page at once** with the switch above the page grid, or change a single page in its editor. Pages you add later use whichever look you picked last.
+- **Clear** removes every page from the current scan (after a confirmation). Delete a single page from its editor.
 - **Save PDF** writes one page per scan to a location you choose. No permissions needed.
 
 ## Get the app

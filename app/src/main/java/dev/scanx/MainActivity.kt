@@ -37,6 +37,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -109,8 +110,9 @@ fun App() {
     var pending by rememberSaveable { mutableStateOf<String?>(null) }
     var base by rememberSaveable { mutableStateOf(Filter.Grey.name) } // filter for newly added pages
     var busy by remember { mutableStateOf(false) }
+    var confirmClear by remember { mutableStateOf(false) }
 
-    val i = editing?.takeIf { it in pages.indices }
+    val i =editing?.takeIf { it in pages.indices }
     // Home is light, editor is dark: flip the status/nav bar icons to match.
     SideEffect {
         val s = if (i != null) SystemBarStyle.dark(Color.Transparent.toArgb())
@@ -163,14 +165,28 @@ fun App() {
         return
     }
 
+    val count = if (pages.size == 1) "1 page" else "${pages.size} pages"
+    if (confirmClear) AlertDialog(
+        onDismissRequest = { confirmClear = false },
+        containerColor = Pal.Sheet,
+        title = { T("Clear all pages?", 20, 800) },
+        text = { T("This removes $count from this scan. PDFs you already saved are not affected.", 15, 400, Pal.Graphite) },
+        dismissButton = { Pill("Keep", { confirmClear = false }, bg = Color.Transparent, fg = Pal.Ink) },
+        confirmButton = {
+            Pill("Clear", {
+                pages.forEach { it.file.delete() }
+                pages.clear()
+                confirmClear = false
+            }, bg = Pal.Red, fg = Color.White)
+        },
+    )
+
     Column(Modifier.fillMaxSize().background(Pal.Paper).systemBarsPadding().padding(horizontal = 20.dp)) {
         Row(Modifier.padding(top = 12.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Image(painterResource(R.drawable.logo), "ScanX", Modifier.size(44.dp))
             Spacer(Modifier.width(12.dp))
-            T(
-                when (pages.size) { 0 -> "New scan"; 1 -> "1 page"; else -> "${pages.size} pages" },
-                26, 800, track = -.6f,
-            )
+            T(if (pages.isEmpty()) "New scan" else count, 26, 800, modifier = Modifier.weight(1f), track = -.6f)
+            if (pages.isNotEmpty() && !busy) Pill("Clear", { confirmClear = true }, bg = Pal.Mist, fg = Pal.Ink)
         }
         if (pages.isNotEmpty()) {
             T("Set every page to", 13, 500, Pal.Graphite, Modifier.padding(bottom = 6.dp))

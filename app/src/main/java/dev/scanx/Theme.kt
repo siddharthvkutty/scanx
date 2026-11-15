@@ -39,6 +39,7 @@ object Pal {
     val Blue = Color(0xFF0B6CE8)
     val Cyan = Color(0xFF1BD5FD)
     val RedOnDark = Color(0xFFFF7A7E)
+    val Red = Color(0xFFD13438)
 }
 
 @OptIn(ExperimentalTextApi::class)
