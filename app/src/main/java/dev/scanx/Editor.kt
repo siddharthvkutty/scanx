@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
@@ -59,7 +60,7 @@ fun fit(box: Size, w: Int, h: Int): Pair<Offset, Float> {
 fun Offset.at(o: Offset, s: Float, w: Int, h: Int) = o + Offset(x * w * s, y * h * s)
 
 /** Crop outline with the logo's rounded L-shaped corner brackets. [dim] darkens everything outside. */
-fun DrawScope.cropMarks(pts: List<Offset>, dim: Boolean) {
+fun DrawScope.cropMarks(pts: List<Offset>, dim: Boolean, brackets: Boolean = true) {
     val quad = Path().apply {
         moveTo(pts[0].x, pts[0].y)
         pts.drop(1).forEach { lineTo(it.x, it.y) }
@@ -67,6 +68,7 @@ fun DrawScope.cropMarks(pts: List<Offset>, dim: Boolean) {
     }
     if (dim) clipPath(quad, ClipOp.Difference) { drawRect(Color.Black.copy(alpha = .5f)) }
     drawPath(quad, Color.White.copy(alpha = .7f), style = Stroke(1.5.dp.toPx()))
+    if (!brackets) return
     for (n in 0..3) {
         val p = pts[n]
         val da = pts[(n + 1) % 4] - p
@@ -85,12 +87,13 @@ fun DrawScope.cropMarks(pts: List<Offset>, dim: Boolean) {
 @Composable
 fun Editor(
     page: Page, index: Int, count: Int,
-    onDone: (Page) -> Unit, onDelete: () -> Unit, onMove: (Int) -> Unit,
+    onDone: (Page) -> Unit, onDelete: () -> Unit,
 ) {
     val raw by produceState<Bitmap?>(null) { value = withContext(Dispatchers.IO) { loadBitmap(page.file, 1600) } }
     var corners by remember { mutableStateOf(page.corners) }
     var filter by remember { mutableStateOf(page.filter) }
     var turns by remember { mutableStateOf(page.turns) }
+    var active by remember { mutableStateOf(-1) } // corner being dragged, -1 when none (drives the magnifier)
     val bmp = remember(raw, turns) { raw?.turn(turns) }
     // What is drawn: B&W scan is previewed with the same threshold the PDF uses.
     val shown by produceState<Bitmap?>(bmp, bmp, filter) {
@@ -123,10 +126,15 @@ fun Editor(
                 Canvas(
                     Modifier.fillMaxSize().pointerInput(b) {
                         var k = 0 // corner being dragged = nearest to the touch-down point
-                        detectDragGestures(onDragStart = { p ->
-                            val (o, s) = fit(size.toSize(), b.width, b.height)
-                            k = corners.indices.minBy { (corners[it].at(o, s, b.width, b.height) - p).getDistance() }
-                        }) { change, d ->
+                        detectDragGestures(
+                            onDragStart = { p ->
+                                val (o, s) = fit(size.toSize(), b.width, b.height)
+                                k = corners.indices.minBy { (corners[it].at(o, s, b.width, b.height) - p).getDistance() }
+                                active = k
+                            },
+                            onDragEnd = { active = -1 },
+                            onDragCancel = { active = -1 },
+                        ) { change, d ->
                             change.consume()
                             val (_, s) = fit(size.toSize(), b.width, b.height)
                             val c = corners[k]
@@ -146,23 +154,43 @@ fun Editor(
                         dstSize = IntSize((b.width * s).roundToInt(), (b.height * s).roundToInt()),
                         colorFilter = filter.matrix?.let { ColorFilter.colorMatrix(ColorMatrix(it)) },
                     )
-                    cropMarks(corners.map { it.at(o, s, b.width, b.height) }, dim = true)
+                    val pts = corners.map { it.at(o, s, b.width, b.height) }
+                    cropMarks(pts, dim = true)
+                    if (active >= 0) {
+                        // Magnifier: 3x zoom around the dragged corner, floated above the finger.
+                        val c = pts[active]
+                        val r = 60.dp.toPx()
+                        var l = Offset(c.x.coerceIn(r, size.width - r), c.y - 1.7f * r)
+                        if (l.y < r) l = Offset(l.x, c.y + 1.7f * r)
+                        val z = 3f
+                        val org = l - (c - o) * z
+                        clipPath(Path().apply { addOval(Rect(l - Offset(r, r), Size(2 * r, 2 * r))) }) {
+                            drawRect(Pal.Ink)
+                            drawImage(
+                                img,
+                                dstOffset = IntOffset(org.x.roundToInt(), org.y.roundToInt()),
+                                dstSize = IntSize((b.width * s * z).roundToInt(), (b.height * s * z).roundToInt()),
+                                colorFilter = filter.matrix?.let { ColorFilter.colorMatrix(ColorMatrix(it)) },
+                            )
+                            cropMarks(pts.map { l + (it - c) * z }, dim = false, brackets = false)
+                        }
+                        drawCircle(Color.White, r, l, style = Stroke(3.dp.toPx()))
+                        val tick = 10.dp.toPx()
+                        drawLine(Pal.Cyan, l - Offset(tick, 0f), l + Offset(tick, 0f), 2.dp.toPx())
+                        drawLine(Pal.Cyan, l - Offset(0f, tick), l + Offset(0f, tick), 2.dp.toPx())
+                    }
                 }
             }
         }
         Spacer(Modifier.height(12.dp))
         FilterSwitch(filter, { filter = it }, dark = true)
-        Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.padding(top = 8.dp, bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Pill("Delete", onDelete, Modifier.weight(1f), Color.Transparent, Pal.RedOnDark)
             Pill("Rotate", {
                 turns = (turns + 1) % 4
                 corners = corners.rotateCw()
             }, Modifier.weight(1f), Pal.InkRaised, Pal.Paper)
-            Pill("Earlier", { onMove(-1) }, Modifier.weight(1f), Pal.InkRaised, Pal.Paper, enabled = index > 0)
-            Pill("Later", { onMove(1) }, Modifier.weight(1f), Pal.InkRaised, Pal.Paper, enabled = index < count - 1)
-        }
-        Row(Modifier.padding(top = 8.dp, bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Pill("Delete", onDelete, Modifier.weight(1f), Color.Transparent, Pal.RedOnDark)
-            Pill("Done", done, Modifier.weight(2f), Pal.Blue, Color.White)
+            Pill("Done", done, Modifier.weight(1.4f), Pal.Blue, Color.White)
         }
     }
 }

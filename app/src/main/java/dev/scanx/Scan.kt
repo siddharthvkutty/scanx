@@ -32,6 +32,20 @@ enum class Filter(val label: String, val matrix: FloatArray?) {
     Scan("B&W scan", null),
 }
 
+/** PDF size/sharpness trade-off: longest photo side kept, and JPEG quality. */
+enum class Quality(val label: String, val maxSide: Int, val jpeg: Int, val hint: String) {
+    Small("Small", 1400, 60, "Smallest file. Fine print can look soft."),
+    Standard("Standard", 2000, 80, "Good for most documents."),
+    High("High", 2600, 90, "Sharpest text, biggest file."),
+}
+
+/** Page size in points; [Fit] makes each page match its scan. */
+enum class PageSize(val label: String, val w: Int, val h: Int) {
+    A4("A4", 595, 842),
+    Letter("Letter", 612, 792),
+    Fit("Fit to scan", 0, 0),
+}
+
 /**
  * One scanned page. The photo itself is never modified: [corners] are fractions (0..1) of the
  * rotated image, order TL, TR, BR, BL; [turns] is the number of clockwise quarter turns.
@@ -107,10 +121,10 @@ private class Counter(private val o: OutputStream) : OutputStream() {
 
 /**
  * Hand-written PDF, one JPEG per page. Android's PdfDocument stores pixels losslessly, which made
- * multi-MB pages; JPEG at quality 80 is roughly 10x smaller.
+ * multi-MB pages; JPEG is roughly 10x smaller.
  * Objects: 1 catalog, 2 page tree, then per page k: 3+3k page, 4+3k content stream, 5+3k image.
  */
-fun writePdf(pages: List<Page>, out: OutputStream) {
+fun writePdf(pages: List<Page>, out: OutputStream, quality: Quality, size: PageSize) {
     val c = Counter(out)
     val xref = ArrayList<Long>() // xref[id - 1] = byte offset of object id
     fun s(t: String) = c.write(t.toByteArray(Charsets.ISO_8859_1))
@@ -121,17 +135,19 @@ fun writePdf(pages: List<Page>, out: OutputStream) {
     begin(2)
     s("<< /Type /Pages /Count ${pages.size} /Kids [${pages.indices.joinToString(" ") { "${3 + 3 * it} 0 R" }}] >>\nendobj\n")
     pages.forEachIndexed { k, p ->
-        val b = p.render(2000)
+        val b = p.render(quality.maxSide)
         val iw = b.width
         val ih = b.height
-        val jpg = ByteArrayOutputStream().also { b.compress(Bitmap.CompressFormat.JPEG, 80, it) }.toByteArray()
+        val jpg = ByteArrayOutputStream().also { b.compress(Bitmap.CompressFormat.JPEG, quality.jpeg, it) }.toByteArray()
         b.recycle()
-        val w = 595 // A4 width in pt; height follows the scan's aspect ratio
-        val h = (w.toFloat() * ih / iw).roundToInt()
+        val (w, h) = if (size == PageSize.Fit) 595 to (595f * ih / iw).roundToInt() else size.w to size.h
+        val scale = minOf(w.toFloat() / iw, h.toFloat() / ih) // image is centred and fitted inside the page
+        val dw = iw * scale
+        val dh = ih * scale
         val id = 3 + 3 * k
         begin(id)
         s("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 $w $h] /Resources << /XObject << /Im0 ${id + 2} 0 R >> >> /Contents ${id + 1} 0 R >>\nendobj\n")
-        val content = "q $w 0 0 $h 0 0 cm /Im0 Do Q"
+        val content = String.format(Locale.ROOT, "q %.2f 0 0 %.2f %.2f %.2f cm /Im0 Do Q", dw, dh, (w - dw) / 2, (h - dh) / 2)
         begin(id + 1)
         s("<< /Length ${content.length} >>\nstream\n$content\nendstream\nendobj\n")
         begin(id + 2)

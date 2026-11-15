@@ -68,9 +68,9 @@ fun Pill(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, bg: 
         contentAlignment = Alignment.Center,
     ) { T(label, 15, 600, fg) }
 
-/** Three-way filter switch. [selected] is null when pages disagree, so nothing is highlighted. */
+/** Segmented switch. [selected] may be null (nothing highlighted, e.g. when pages disagree). */
 @Composable
-fun FilterSwitch(selected: Filter?, onSelect: (Filter) -> Unit, dark: Boolean) {
+fun <O> Segmented(options: List<O>, selected: O?, label: (O) -> String, onSelect: (O) -> Unit, dark: Boolean) {
     val track = if (dark) Pal.InkRaised else Pal.Mist
     val on = if (dark) Pal.Paper else Pal.Ink
     val onText = if (dark) Pal.Ink else Pal.Paper
@@ -79,18 +79,22 @@ fun FilterSwitch(selected: Filter?, onSelect: (Filter) -> Unit, dark: Boolean) {
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(track).padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Filter.entries.forEach { f ->
-            val sel = f == selected
+        options.forEach { o ->
+            val sel = o == selected
             Box(
                 Modifier.weight(1f).heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp))
                     .background(if (sel) on else Color.Transparent)
-                    .selectable(sel, role = Role.RadioButton, onClick = { onSelect(f) })
+                    .selectable(sel, role = Role.RadioButton, onClick = { onSelect(o) })
                     .padding(horizontal = 4.dp),
                 contentAlignment = Alignment.Center,
-            ) { T(f.label, 14, 600, if (sel) onText else off) }
+            ) { T(label(o), 14, 600, if (sel) onText else off) }
         }
     }
 }
+
+@Composable
+fun FilterSwitch(selected: Filter?, onSelect: (Filter) -> Unit, dark: Boolean) =
+    Segmented(Filter.entries, selected, { it.label }, onSelect, dark)
 
 /** A sheet of paper with the logo's dog-eared top-right corner. */
 val SheetShape = GenericShape { s, _ ->

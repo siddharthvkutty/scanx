@@ -8,13 +8,14 @@ An Android app that turns photos of paper into a clean PDF. Pick images from you
 
 ## What it does
 
-- **Add pages** from the gallery (several at once) or the built-in camera. The camera outlines the page live and keeps shooting until you tap Done, so a whole stack is one go.
+- **Add pages** from the gallery (several at once) or the built-in camera. The camera outlines the page live, has a flash toggle, and keeps shooting until you tap Done, so a whole stack is one go.
 - **Edges are found for you.** OpenCV looks for the sheet of paper in each photo and straightens it. If it guesses wrong, drag the four corner brackets yourself, or tap *Detect edges* to try again.
 - **Three looks:** Original, Greyscale, and B&W scan. B&W scan compares each pixel with its surroundings, so shadows and uneven light drop out and the paper goes white.
-- **Rotate and reorder.** Each page editor has Rotate, and Earlier / Later to move the page within the scan.
+- **Rotate and reorder.** Rotate is in each page's editor. Touch and hold a page in the grid, then drag it to a new spot.
+- **A magnifier** appears above your finger while you drag a crop corner, so you can place it precisely.
 - **Set every page at once** with the switch above the page grid, or change a single page in its editor. Pages you add later use whichever look you picked last.
-- **Clear** removes every page from the current scan (after a confirmation). Delete a single page from its editor.
-- **Save PDF** writes one page per scan to a location you choose, then offers Share and Open. Pages are JPEG-compressed, so files stay small.
+- **Clear** removes every page from the current scan, and Delete removes a single page from its editor. Both show an **Undo** bar for a few seconds.
+- **Save PDF** asks for a quality (Small, Standard, High) and page size (A4, Letter, or fit to each scan), writes one page per scan to a location you choose, then offers Share and Open. Pages are JPEG-compressed, so files stay small.
 - **Your scan is kept** if you close the app. Pages stay until you save or clear them.
 
 ## Get the app
@@ -57,7 +58,6 @@ licenses/                             license text for bundled third-party files
 ## Known limits
 
 - Edge detection looks for the largest four-sided shape. A cluttered background or a page on a similar-coloured table can fool it.
-- Pages are reordered with Earlier / Later buttons, not by dragging.
 - B&W scan is pure black and white. Faint pencil or light-coloured text can drop out; use Greyscale for those.
 - The CI build is a debug APK. A signed release build needs a keystore added to the workflow.
 

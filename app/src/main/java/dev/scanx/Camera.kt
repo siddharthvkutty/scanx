@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
@@ -57,6 +58,9 @@ fun CameraScreen(count: Int, onShot: (File) -> Unit, onDone: () -> Unit) {
     val capture = remember { ImageCapture.Builder().build() }
     var live by remember { mutableStateOf<Pair<List<Offset>, IntSize>?>(null) } // outline + analysed frame size
     var shooting by remember { mutableStateOf(false) }
+    var cam by remember { mutableStateOf<Camera?>(null) }
+    var hasFlash by remember { mutableStateOf(false) }
+    var torch by remember { mutableStateOf(false) }
     BackHandler(onBack = onDone)
 
     DisposableEffect(Unit) {
@@ -88,7 +92,9 @@ fun CameraScreen(count: Int, onShot: (File) -> Unit, onDone: () -> Unit) {
                 }
             }
             p.unbindAll()
-            p.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, capture, analysis)
+            val c = p.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, capture, analysis)
+            cam = c
+            hasFlash = c.cameraInfo.hasFlashUnit()
         }, ContextCompat.getMainExecutor(ctx))
         onDispose { provider?.unbindAll(); exec.shutdown() }
     }
@@ -119,7 +125,13 @@ fun CameraScreen(count: Int, onShot: (File) -> Unit, onDone: () -> Unit) {
                     cropMarks(c.map { it.at(o, s, sz.width, sz.height) }, dim = false)
                 }
             }
-            Box(Modifier.align(Alignment.TopCenter).padding(top = 12.dp).clip(CircleShape).background(Pal.Ink.copy(alpha = .75f)).padding(horizontal = 14.dp, vertical = 8.dp)) {
+            if (hasFlash) Pill(
+                if (torch) "Flash on" else "Flash off",
+                { torch = !torch; cam?.cameraControl?.enableTorch(torch) },
+                Modifier.align(Alignment.TopEnd).padding(12.dp),
+                bg = if (torch) Pal.Cyan else Pal.Ink.copy(alpha = .75f), fg = if (torch) Pal.Ink else Pal.Paper,
+            )
+            Box(Modifier.align(Alignment.TopStart).padding(12.dp).clip(CircleShape).background(Pal.Ink.copy(alpha = .75f)).padding(horizontal = 14.dp, vertical = 8.dp)) {
                 T(if (live != null) "Page found" else "Looking for page edges", 13, 600, Pal.Paper)
             }
         }
