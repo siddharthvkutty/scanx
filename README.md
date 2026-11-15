@@ -1,68 +1,50 @@
 <p align="center">
-  <img src="assets/logo.png" alt="ScanX" width="160">
+  <img src="assets/logo.png" alt="ScanX" width="130">
 </p>
 
-# ScanX
+<h1 align="center">ScanX</h1>
 
-An Android app that turns photos of paper into a clean PDF. Pick images from your gallery or shoot them with the camera, tidy up each page, and save everything as one file.
+<p align="center">Turn paper into clean PDFs with your phone.<br>Snap a page, and ScanX finds the edges, straightens it, and tidies the colors.</p>
 
-## What it does
+## Install
 
-- **Add pages** from the gallery (several at once) or the built-in camera. The camera outlines the page live, has a flash toggle, and keeps shooting until you tap Done, so a whole stack is one go.
-- **Edges are found for you.** OpenCV looks for the sheet of paper in each photo and straightens it. If it guesses wrong, drag the four corner brackets yourself, or tap *Detect edges* to try again.
-- **Three looks:** Original, Greyscale, and B&W scan. B&W scan compares each pixel with its surroundings, so shadows and uneven light drop out and the paper goes white.
-- **Rotate and reorder.** Rotate is in each page's editor. Touch and hold a page in the grid, then drag it to a new spot.
-- **A magnifier** appears above your finger while you drag a crop corner, so you can place it precisely.
-- **Set every page at once** with the switch above the page grid, or change a single page in its editor. Pages you add later use whichever look you picked last.
-- **Clear** removes every page from the current scan, and Delete removes a single page from its editor. Both show an **Undo** bar for a few seconds.
-- **Save PDF** asks for a quality (Small, Standard, High) and page size (A4, Letter, or fit to each scan), writes one page per scan to a location you choose, then offers Share and Open. Pages are JPEG-compressed, so files stay small.
-- **Your scan is kept** if you close the app. Pages stay until you save or clear them.
+Android 9 or newer.
 
-## Get the app
+Download the APK from the [latest release](https://github.com/siddharthvkutty/scanx/releases/latest) and open it on your phone. Android will ask you to allow installs from your browser or file manager the first time. Say yes, then tap Install.
 
-The project builds on GitHub, so you don't need Android Studio.
+Everything happens on your phone. ScanX has no accounts, no ads, and never connects to the internet.
 
-1. Push this repo to GitHub.
-2. Open the **Actions** tab and wait for the *Build APK* run to finish (or start it with **Run workflow**).
-3. Download the `scanx-debug-apk` artifact from the run and unzip it.
-4. Copy `app-debug.apk` to your phone and open it. Android will ask you to allow installs from your file manager or browser the first time.
+## Use
 
-Needs Android 9 (API 28) or newer. The camera asks for permission the first time; the gallery needs none.
+Tap **Camera** to shoot pages, or **Gallery** to pick photos you already have. ScanX outlines each page for you. In the camera you can keep shooting until the whole stack is done, then tap Done.
 
-## Project layout
+Tap a page to fine-tune it. Drag the corners if the edges are off, and a magnifier shows up so you can place them exactly. Rotate it if it came in sideways.
 
-```
-assets/logo.png                       full-size logo
-app/src/main/java/dev/scanx/
-  MainActivity.kt                     home screen, page grid, saving
-  Editor.kt                           page editor and the corner-bracket overlay
-  Camera.kt                           live camera with edge outline (CameraX)
-  Theme.kt                            colours, font, buttons, filter switch
-  Scan.kt                             page model, perspective crop, PDF writer
-  Detect.kt                           OpenCV edge detection and B&W threshold
-app/src/main/res/
-  drawable-nodpi/                     in-app logo and launcher icon artwork
-  font/inter_tight.ttf                Inter Tight (SIL Open Font License)
-.github/workflows/build.yml           CI that builds the debug APK
-LICENSE                               MIT
-licenses/                             license text for bundled third-party files
-```
+Pick how pages look, either all at once or one by one:
 
-## How it works
+- **Original** keeps the colors
+- **Greyscale** for everyday documents
+- **B&W scan** for the crisp, white-paper look of a real scanner, with shadows gone
 
-- Each page keeps the original photo plus four crop corners and a filter. The photo is never modified, so you can change edges and looks as often as you like.
-- The crop is a perspective warp (`Matrix.setPolyToPoly`) from the four corners onto a rectangle. Filters are colour matrices, so the editor previews them live.
-- PDF pages are A4 width, with height following each scan's aspect ratio. The PDF is written by hand (one JPEG per page) instead of Android's built-in writer, which stores pixels uncompressed.
-- The in-progress scan is a small text file (`pages.txt`) next to the photos in the app's private storage.
+Touch and hold a page to drag it into a new position. When it all looks right, tap **Save PDF**, then share it or open it straight away.
 
-## Known limits
+## Features
 
-- Edge detection looks for the largest four-sided shape. A cluttered background or a page on a similar-coloured table can fool it.
-- B&W scan is pure black and white. Faint pencil or light-coloured text can drop out; use Greyscale for those.
-- The CI build is a debug APK. A signed release build needs a keystore added to the workflow.
+- Scan with the built-in camera or import from your gallery
+- Page edges found automatically, with draggable corners when you want control
+- Live outline in the camera, plus a flash toggle for dim rooms
+- Shoot a whole stack in one go
+- Greyscale, black and white, or original colors
+- Rotate, reorder, and delete pages
+- Undo for deleted pages
+- Choose PDF quality and page size (A4, Letter, or fit to each scan)
+- Small PDF files that are still sharp
+- Your scan is kept if you close the app
+
+## Credits
+
+Page detection is powered by [OpenCV](https://opencv.org). Text is set in [Inter Tight](licenses/InterTight-OFL.txt).
 
 ## License
 
-ScanX is released under the [MIT License](LICENSE).
-
-Third-party pieces keep their own licenses: Inter Tight is under the SIL Open Font License 1.1 ([text](licenses/InterTight-OFL.txt)), and OpenCV is under Apache 2.0.
+[MIT](LICENSE)
