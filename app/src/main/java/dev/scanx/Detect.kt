@@ -51,7 +51,7 @@ fun detectCorners(src: Bitmap): List<Offset>? {
 }
 
 /** New page with auto-detected borders, falling back to the default inset. */
-suspend fun newPage(f: File): Page = withContext(Dispatchers.IO) {
+suspend fun newPage(f: File, filter: Filter): Page = withContext(Dispatchers.IO) {
     val c = detectCorners(loadBitmap(f, 500))
-    if (c != null) Page(f, c) else Page(f)
+    if (c != null) Page(f, c, filter) else Page(f, filter = filter)
 }

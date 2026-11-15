@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -22,22 +23,23 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -51,17 +53,28 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -77,7 +90,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { MaterialTheme { Surface(Modifier.fillMaxSize()) { App() } } }
+        setContent { App() }
     }
 }
 
@@ -94,7 +107,16 @@ fun App() {
     ) { mutableStateListOf<Page>() }
     var editing by rememberSaveable { mutableStateOf<Int?>(null) }
     var pending by rememberSaveable { mutableStateOf<String?>(null) }
+    var base by rememberSaveable { mutableStateOf(Filter.Grey.name) } // filter for newly added pages
     var busy by remember { mutableStateOf(false) }
+
+    val i = editing?.takeIf { it in pages.indices }
+    // Home is light, editor is dark: flip the status/nav bar icons to match.
+    SideEffect {
+        val s = if (i != null) SystemBarStyle.dark(Color.Transparent.toArgb())
+        else SystemBarStyle.light(Color.Transparent.toArgb(), Color.Transparent.toArgb())
+        (ctx as ComponentActivity).enableEdgeToEdge(s, s)
+    }
 
     fun newFile() = File(ctx.filesDir, "p${System.nanoTime()}.jpg")
     fun toast(s: String) = Toast.makeText(ctx, s, Toast.LENGTH_LONG).show()
@@ -104,16 +126,16 @@ fun App() {
             for (u in uris) {
                 val f = newFile()
                 withContext(Dispatchers.IO) {
-                    ctx.contentResolver.openInputStream(u)!!.use { i -> f.outputStream().use { i.copyTo(it) } }
+                    ctx.contentResolver.openInputStream(u)!!.use { src -> f.outputStream().use { src.copyTo(it) } }
                 }
-                pages += newPage(f)
+                pages += newPage(f, Filter.valueOf(base))
             }
         }
     }
     val camera = rememberLauncherForActivityResult(TakePicture()) { ok ->
         val f = pending?.let { File(it) }
         pending = null
-        if (f != null) scope.launch { if (ok) pages += newPage(f) else f.delete() }
+        if (f != null) scope.launch { if (ok) pages += newPage(f, Filter.valueOf(base)) else f.delete() }
     }
     val save = rememberLauncherForActivityResult(CreateDocument("application/pdf")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -127,13 +149,12 @@ fun App() {
                 pages.forEach { it.file.delete() }
                 pages.clear()
                 toast("PDF saved")
-            }.onFailure { toast("Save failed: ${it.message}") }
+            }.onFailure { toast("Couldn't save the PDF: ${it.message}") }
             busy = false
         }
     }
 
-    val i = editing
-    if (i != null && i in pages.indices) {
+    if (i != null) {
         Editor(
             page = pages[i],
             onDone = { pages[i] = it; editing = null },
@@ -142,29 +163,62 @@ fun App() {
         return
     }
 
-    Column(Modifier.fillMaxSize().systemBarsPadding().padding(16.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button({ gallery.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) }) { Text("Gallery") }
-            Button({
+    Column(Modifier.fillMaxSize().background(Pal.Paper).systemBarsPadding().padding(horizontal = 20.dp)) {
+        Row(Modifier.padding(top = 12.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Image(painterResource(R.drawable.logo), "ScanX", Modifier.size(44.dp))
+            Spacer(Modifier.width(12.dp))
+            T(
+                when (pages.size) { 0 -> "New scan"; 1 -> "1 page"; else -> "${pages.size} pages" },
+                26, 800, track = -.6f,
+            )
+        }
+        if (pages.isNotEmpty()) {
+            T("Set every page to", 13, 500, Pal.Graphite, Modifier.padding(bottom = 6.dp))
+            FilterSwitch(pages.map { it.filter }.distinct().singleOrNull(), { f ->
+                base = f.name
+                for (k in pages.indices) pages[k] = pages[k].copy(filter = f)
+            }, dark = false)
+            Spacer(Modifier.height(16.dp))
+        }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            if (pages.isEmpty()) Column(
+                Modifier.align(Alignment.Center).padding(horizontal = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Image(painterResource(R.drawable.logo), null, Modifier.size(180.dp))
+                Spacer(Modifier.height(20.dp))
+                T("Nothing scanned yet", 22, 800, track = -.4f)
+                Spacer(Modifier.height(6.dp))
+                T(
+                    "Take a photo or pick images from your gallery. Page edges are found for you.",
+                    15, 400, Pal.Graphite, align = TextAlign.Center,
+                )
+            } else LazyVerticalGrid(
+                GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) { itemsIndexed(pages) { idx, p -> Thumb(idx, p) { editing = idx } } }
+        }
+        if (busy) LinearProgressIndicator(
+            Modifier.fillMaxWidth().padding(top = 8.dp), color = Pal.Blue, trackColor = Pal.Mist,
+        )
+        Row(
+            Modifier.padding(top = 12.dp, bottom = 12.dp).fillMaxWidth()
+                .clip(RoundedCornerShape(28.dp)).background(Pal.Ink).padding(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Pill("Gallery", { gallery.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) },
+                Modifier.weight(1f), Color.Transparent, Pal.Paper)
+            Pill("Camera", {
                 val f = newFile()
                 pending = f.path
                 camera.launch(FileProvider.getUriForFile(ctx, "${ctx.packageName}.fp", f))
-            }) { Text("Camera") }
+            }, Modifier.weight(1f), Color.Transparent, Pal.Paper)
+            Pill(
+                if (busy) "Saving…" else "Save PDF", { save.launch("scan.pdf") },
+                Modifier.weight(1.3f), Pal.Blue, Color.White, enabled = pages.isNotEmpty() && !busy,
+            )
         }
-        Box(Modifier.weight(1f).fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-            if (pages.isEmpty()) Text("Add pages from the gallery or camera")
-            else LazyVerticalGrid(
-                GridCells.Adaptive(140.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) { itemsIndexed(pages) { idx, p -> Thumb(idx, p) { editing = idx } } }
-        }
-        if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-        Button(
-            { save.launch("scan.pdf") },
-            Modifier.fillMaxWidth(),
-            enabled = pages.isNotEmpty() && !busy,
-        ) { Text("Save PDF (${pages.size} pages)") }
     }
 }
 
@@ -173,9 +227,25 @@ fun Thumb(index: Int, page: Page, onClick: () -> Unit) {
     val img by produceState<Bitmap?>(null, page) {
         value = withContext(Dispatchers.IO) { page.render(400) }
     }
-    Box(Modifier.aspectRatio(.75f).background(Color.LightGray).clickable(onClick = onClick)) {
-        img?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
-        Text("${index + 1}", Modifier.align(Alignment.TopStart).padding(6.dp))
+    Box(
+        Modifier.aspectRatio(.74f)
+            .shadow(8.dp, SheetShape, ambientColor = Pal.Ink.copy(.3f), spotColor = Pal.Ink.copy(.3f))
+            .clip(SheetShape).background(Pal.Sheet)
+            .clickable(onClickLabel = "Edit page ${index + 1}", role = Role.Button, onClick = onClick)
+            .drawWithContent {
+                drawContent()
+                val c = size.width * .22f // the folded-over corner
+                drawPath(
+                    Path().apply { moveTo(size.width - c, 0f); lineTo(size.width, c); lineTo(size.width - c, c); close() },
+                    Pal.Mist,
+                )
+            },
+    ) {
+        img?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize().padding(12.dp), contentScale = ContentScale.Fit) }
+        Box(
+            Modifier.align(Alignment.BottomStart).padding(10.dp).size(26.dp).clip(CircleShape).background(Pal.Ink),
+            contentAlignment = Alignment.Center,
+        ) { T("${index + 1}", 12, 600, Pal.Paper) }
     }
 }
 
@@ -197,7 +267,21 @@ fun Editor(page: Page, onDone: (Page) -> Unit, onDelete: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    Column(Modifier.fillMaxSize().systemBarsPadding().padding(16.dp)) {
+    Column(Modifier.fillMaxSize().background(Pal.Ink).systemBarsPadding().padding(horizontal = 20.dp)) {
+        Row(Modifier.padding(top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                T("Adjust edges", 22, 800, Pal.Paper, track = -.4f)
+                T("Drag a corner to move it", 13, 500, Color(0xFFA8A8A5))
+            }
+            Pill("Detect edges", {
+                val b = bmp ?: return@Pill
+                scope.launch {
+                    val c = withContext(Dispatchers.Default) { detectCorners(b) }
+                    if (c != null) corners = c
+                    else Toast.makeText(ctx, "No page edges found. Drag the corners instead.", Toast.LENGTH_SHORT).show()
+                }
+            }, bg = Pal.InkRaised, fg = Pal.Paper)
+        }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             val b = bmp
             if (b != null) {
@@ -229,33 +313,39 @@ fun Editor(page: Page, onDone: (Page) -> Unit, onDelete: () -> Unit) {
                         colorFilter = filter.matrix?.let { ColorFilter.colorMatrix(ColorMatrix(it)) },
                     )
                     val pts = corners.map { it.at(o, s, b) }
-                    val blue = Color(0xFF2196F3)
-                    drawPath(
-                        Path().apply {
-                            moveTo(pts[0].x, pts[0].y)
-                            pts.drop(1).forEach { lineTo(it.x, it.y) }
-                            close()
-                        },
-                        blue, style = Stroke(3.dp.toPx()),
-                    )
-                    pts.forEach { drawCircle(blue, 14.dp.toPx(), it, alpha = .6f) }
+                    val quad = Path().apply {
+                        moveTo(pts[0].x, pts[0].y)
+                        pts.drop(1).forEach { lineTo(it.x, it.y) }
+                        close()
+                    }
+                    // Dim everything outside the crop, like the paper on a desk.
+                    clipPath(quad, ClipOp.Difference) { drawRect(Color.Black.copy(alpha = .5f)) }
+                    drawPath(quad, Color.White.copy(alpha = .7f), style = Stroke(1.5.dp.toPx()))
+                    // Corner brackets, same rounded L as the logo's viewfinder.
+                    for (n in 0..3) {
+                        val p = pts[n]
+                        val da = pts[(n + 1) % 4] - p
+                        val db = pts[(n + 3) % 4] - p
+                        val len = minOf(28.dp.toPx(), da.getDistance() / 2, db.getDistance() / 2)
+                        val bracket = Path().apply {
+                            val a = p + da / da.getDistance().coerceAtLeast(1f) * len
+                            val c = p + db / db.getDistance().coerceAtLeast(1f) * len
+                            moveTo(a.x, a.y); lineTo(p.x, p.y); lineTo(c.x, c.y)
+                        }
+                        drawPath(bracket, Color.Black.copy(alpha = .4f), style = Stroke(9.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+                        drawPath(bracket, Pal.Cyan, style = Stroke(5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+                    }
                 }
             }
         }
-        Row(Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Filter.entries.forEach { f -> FilterChip(filter == f, { filter = f }, { Text(f.label) }) }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onDelete) { Text("Delete") }
-            OutlinedButton({
-                val b = bmp ?: return@OutlinedButton
-                scope.launch {
-                    val c = withContext(Dispatchers.Default) { detectCorners(b) }
-                    if (c != null) corners = c
-                    else Toast.makeText(ctx, "No page edges found, drag the corners", Toast.LENGTH_SHORT).show()
-                }
-            }) { Text("Auto") }
-            Button(done) { Text("Done") }
+        Spacer(Modifier.height(12.dp))
+        FilterSwitch(filter, { filter = it }, dark = true)
+        Row(
+            Modifier.padding(top = 12.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Pill("Delete", onDelete, Modifier.weight(1f), Color.Transparent, Pal.RedOnDark)
+            Pill("Done", done, Modifier.weight(2f), Pal.Blue, Color.White)
         }
     }
 }
