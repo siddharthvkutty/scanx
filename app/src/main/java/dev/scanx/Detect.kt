@@ -50,6 +50,26 @@ fun detectCorners(src: Bitmap): List<Offset>? {
     return null
 }
 
+/**
+ * Adaptive-threshold black and white: every pixel is compared with its neighbourhood, so shadows
+ * and uneven lighting drop out and paper goes white. Same size as the input; returns [this] if
+ * OpenCV failed to load.
+ */
+fun Bitmap.binarize(): Bitmap {
+    if (!cvReady) return this
+    val m = Mat()
+    Utils.bitmapToMat(this, m)
+    Imgproc.cvtColor(m, m, Imgproc.COLOR_RGBA2GRAY)
+    Imgproc.GaussianBlur(m, m, Size(3.0, 3.0), 0.0)
+    val block = (maxOf(width, height) / 40).let { if (it % 2 == 0) it + 1 else it }.coerceAtLeast(11)
+    Imgproc.adaptiveThreshold(m, m, 255.0, Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C, Imgproc.THRESH_BINARY, block, 10.0)
+    Imgproc.cvtColor(m, m, Imgproc.COLOR_GRAY2RGBA)
+    val out = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    Utils.matToBitmap(m, out)
+    m.release()
+    return out
+}
+
 /** New page with auto-detected borders, falling back to the default inset. */
 suspend fun newPage(f: File, filter: Filter): Page = withContext(Dispatchers.IO) {
     val c = detectCorners(loadBitmap(f, 500))
